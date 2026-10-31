@@ -54,6 +54,17 @@
   .item-card{ border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--paper); }
   .item-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
   .item-top span{font-size:11px; font-weight:700; color:var(--ink-soft);}
+  .item-card.dragging{opacity:.45;}
+  .item-card.over{border-color:var(--teal); box-shadow:0 0 0 2px #BFE0DE; transform:translateY(2px);}
+  .item-left{display:flex; align-items:center; gap:8px;}
+  .drag-handle{cursor:grab; font-size:15px; color:var(--ink-soft); letter-spacing:-2px; user-select:none; padding:2px 4px; border-radius:5px; touch-action:none;}
+  .drag-handle:hover{background:#fff; color:var(--ink);}
+  .drag-handle:active{cursor:grabbing;}
+  .item-tools{display:flex; align-items:center; gap:4px;}
+  .item-tools button{background:#fff; border:1px solid var(--line); border-radius:6px; width:24px; height:24px; font-size:11px; cursor:pointer; color:var(--ink); padding:0;}
+  .item-tools button:hover:not(:disabled){border-color:var(--ink);}
+  .item-tools button:disabled{opacity:.35; cursor:default;}
+  .item-tools input.pos{width:44px; padding:3px 4px; font-size:12px; text-align:center; border-radius:6px;}
   .item-del{ background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px; line-height:1; padding:2px 4px; }
   .itbis-toggle{ display:flex; align-items:center; gap:6px; margin-top:10px; font-size:12px; color:var(--ink-soft); font-weight:600; }
   .itbis-toggle input{width:15px;height:15px;}
@@ -354,6 +365,7 @@ let logoData = null;
 let itemCounter = 0;
 let items = [];
 let currentId = null;
+let dragIdx = null;
 
 function uid(){ return 'it'+(itemCounter++); }
 function newItem(){ return { id: uid(), desc:'', qty:1, price:0, itbis:true }; }
@@ -390,7 +402,15 @@ function renderItemsPanel(){
     const card = document.createElement('div');
     card.className='item-card';
     card.innerHTML = `
-      <div class="item-top"><span>Artículo ${idx+1}</span><button class="item-del" onclick="removeItem('${it.id}')" title="Eliminar">✕</button></div>
+      <div class="item-top">
+        <div class="item-left"><span class="drag-handle" title="Arrastra para reordenar">⋮⋮</span><span>Artículo ${idx+1}</span></div>
+        <div class="item-tools">
+          <button onclick="moveItem(${idx},${idx-1})" title="Subir" ${idx===0?'disabled':''}>▲</button>
+          <button onclick="moveItem(${idx},${idx+1})" title="Bajar" ${idx===items.length-1?'disabled':''}>▼</button>
+          <input class="pos" type="number" min="1" max="${items.length}" value="${idx+1}" title="Mover a la posición…" onchange="moveItem(${idx},(parseInt(this.value)||1)-1)">
+          <button class="item-del" onclick="removeItem('${it.id}')" title="Eliminar" style="border:none;width:auto;font-size:16px;color:var(--danger)">✕</button>
+        </div>
+      </div>
       <label>Descripción</label>
       <input type="text" value="${escapeAttr(it.desc)}" placeholder="Descripción del producto o servicio" oninput="updateItem('${it.id}','desc',this.value)">
       <div class="row2">
@@ -402,8 +422,23 @@ function renderItemsPanel(){
         <span>Aplicar ITBIS 18% a este artículo</span>
       </div>
     `;
+    const handle = card.querySelector('.drag-handle');
+    handle.addEventListener('mousedown', ()=>{ card.draggable = true; });
+    card.addEventListener('dragstart', e=>{ dragIdx = idx; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain', String(idx));}catch(_){} });
+    card.addEventListener('dragover', e=>{ if(dragIdx===null) return; e.preventDefault(); card.classList.add('over'); });
+    card.addEventListener('dragleave', ()=>card.classList.remove('over'));
+    card.addEventListener('drop', e=>{ e.preventDefault(); const from = dragIdx; dragIdx = null; if(from!==null && from!==idx) moveItem(from, idx); else renderItemsPanel(); });
+    card.addEventListener('dragend', ()=>{ dragIdx = null; card.draggable = false; card.classList.remove('dragging'); document.querySelectorAll('.item-card.over').forEach(c=>c.classList.remove('over')); });
     list.appendChild(card);
   });
+}
+function moveItem(from, to){
+  to = Math.max(0, Math.min(items.length-1, to));
+  if(from===to || from<0 || from>=items.length){ renderItemsPanel(); return; }
+  const [it] = items.splice(from,1);
+  items.splice(to,0,it);
+  renderItemsPanel();
+  render();
 }
 function toggleAllITBIS(){
   const on = $('applyITBIS').checked;
